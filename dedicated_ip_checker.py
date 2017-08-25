@@ -8,6 +8,7 @@ import sys
 import colorama
 import shutil
 import os
+import random
 
 # Get the local IP using socket
 def get_local_ip():
@@ -71,8 +72,9 @@ def server(port):
     c.close()
 
 # Check the mapped port via canyouseeme.org
-def check_port(ip, port):
-    print("Checking port...")
+def check_port(ip, port, initial_selection=False):
+    if not initial_selection:
+        print("Checking port...")
     headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36"}
     data = {"IP": ip, "port": port}
 
@@ -113,25 +115,26 @@ def main():
 
     print(colorama.Fore.WHITE + "\nStarting...")
 
-    if len(sys.argv) > 1 and sys.argv[1] == "-p":
-            test_port = int(sys.argv[2])
-    else:
-        test_port = 8000
-
-    print(colorama.Fore.WHITE + "Using port", test_port)
-
     local_ip = get_local_ip()
     print(colorama.Fore.WHITE + "Local IP:", local_ip)
 
     public_ip = get_public_ip()
     print(colorama.Fore.WHITE + "Public IP:", public_ip)
 
+    if len(sys.argv) > 1 and sys.argv[1] == "-p":
+            test_port = int(sys.argv[2])
+    else:
+        while True:
+            test_port = random.randrange(10000, 65536)
+            if not check_port(public_ip, test_port, initial_selection=True): break
+
+    print(colorama.Fore.WHITE + "Using port", test_port)
+
     if local_ip != public_ip:
         print(colorama.Fore.MAGENTA + "Your computer appears to be behind a router!")
         print(colorama.Fore.WHITE + "Mapping port...")
         map_port(local_ip, test_port)
         print(colorama.Fore.GREEN + "Success!")
-
 
     threading.Thread(target=server, args=[test_port]).start()
 
