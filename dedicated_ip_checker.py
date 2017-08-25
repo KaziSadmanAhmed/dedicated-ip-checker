@@ -1,5 +1,6 @@
 # Imports
 import requests
+from bs4 import BeautifulSoup as BS
 import threading
 import socket
 import subprocess
@@ -10,11 +11,14 @@ import os
 
 # Get the local IP using socket
 def get_local_ip():
+    print(colorama.Fore.WHITE + "Getting local IP...")
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(3)
     try:
         s.connect(("8.8.8.8", 80))
-        return s.getsockname()[0]
+        local_ip = s.getsockname()[0]
+        print(colorama.Fore.GREEN + "Success!")
+        return local_ip
     except socket.timeout:
         print(colorama.Fore.RED + "Error: Connection timeout when trying to get local IP")
         print(colorama.Fore.WHITE)
@@ -23,8 +27,11 @@ def get_local_ip():
 
 # Get the public IP using ipify api
 def get_public_ip():
+    print(colorama.Fore.WHITE + "Getting public IP...")
     try:
-        return requests.get("https://api.ipify.org").text
+        public_ip = requests.get("https://api.ipify.org").text
+        print(colorama.Fore.GREEN + "Success!")
+        return public_ip
     except:
         print(colorama.Fore.RED + "Error: Could not get public IP!")
         print(colorama.Fore.WHITE)
@@ -53,59 +60,41 @@ def map_port(ip, port):
 
 # Create a TCP server using socket
 def server(port):
+    print(colorama.Fore.WHITE + "Starting up server...")
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(3)
     host = "0.0.0.0"
     s.bind((host,port))
     s.listen(1)
     print(colorama.Fore.WHITE + "Server started successfully!")
-    try:
-        c, addr = s.accept()
-        c.shutdown(socket.SHUT_RDWR)
-        c.close()
-    except socket.timeout:
-        return
+    c, addr = s.accept()
+    c.shutdown(socket.SHUT_RDWR)
+    c.close()
 
-# Get random proxy from gimmeproxy
-def random_proxy():
+# Check the mapped port via canyouseeme.org
+def check_port(ip, port):
+    print("Checking port...")
+    headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36"}
+    data = {"IP": ip, "port": port}
+
     try:
-        r = requests.get("https://gimmeproxy.com/api/getProxy?protocol=http").json()
-        ip, port = r["ip"], int(r["port"])
-        return ip, port
-    except:
-        print(colorama.Fore.RED + "Error: Could not get a proxy!")
+        r = requests.post("http://canyouseeme.org", headers=headers, data=data)
+        if r.ok:
+            soup = BS(r.text, "lxml")
+
+            if soup.find("font", {"color": "green"}):
+                return True
+            else:
+                return False
+
+        else:
+            raise Exception
+
+    except Exception as e:
+        print(e)
+        print(colorama.Fore.RED + "Error: Could not check the port!")
         print(colorama.Fore.WHITE)
         input("Press Enter to exit.")
         sys.exit()
-
-# Create the client and connect to the server
-def client(host, port):
-    while True:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(3)
-            print(colorama.Fore.WHITE + "Client started successfully!")
-            print(colorama.Fore.WHITE + "Getting a random proxy...")
-            proxy_host, proxy_port = random_proxy()
-            s.connect((proxy_host, proxy_port))
-            print(colorama.Fore.GREEN + "Success!")
-            break
-        except socket.timeout:
-            s.close()
-            print(colorama.Fore.RED + "Error: Proxy down")
-            print(colorama.Fore.RED + "Error: Restarting client...")
-
-    global connection_status
-    try:
-        s.send("""GET http://{0}:{1} HTTP/1.1
-                Host: http://{0}:{1} \r\n\r\n""".format(host, port).encode("utf-8"))
-        r = s.recv(3000)
-        print(colorama.Fore.GREEN + "Connected to server successfully!")
-        connection_status = True
-        s.close()
-    except socket.timeout:
-        print(colorama.Fore.RED + "Error: Client timed out")
-        connection_status = False
 
 # Show welcome messages
 def welcome():
@@ -131,14 +120,10 @@ def main():
 
     print(colorama.Fore.WHITE + "Using port", test_port)
 
-    print(colorama.Fore.WHITE + "Getting local IP...")
     local_ip = get_local_ip()
-    print(colorama.Fore.GREEN + "Success!")
     print(colorama.Fore.WHITE + "Local IP:", local_ip)
 
-    print(colorama.Fore.WHITE + "Getting public IP...")
     public_ip = get_public_ip()
-    print(colorama.Fore.GREEN + "Success!")
     print(colorama.Fore.WHITE + "Public IP:", public_ip)
 
     if local_ip != public_ip:
@@ -147,13 +132,12 @@ def main():
         map_port(local_ip, test_port)
         print(colorama.Fore.GREEN + "Success!")
 
-    print(colorama.Fore.WHITE + "Starting up server...")
+
     threading.Thread(target=server, args=[test_port]).start()
 
-    print(colorama.Fore.WHITE + "Starting up client...")
-    client(public_ip, test_port)
+    result = check_port(public_ip, test_port)
 
-    if connection_status:
+    if result:
         print(colorama.Fore.GREEN + "\nYou have a dedicated IP address")
     else:
         print(colorama.Fore.RED + "\nYou have a shared IP address")
